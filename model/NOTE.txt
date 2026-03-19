@@ -1,0 +1,7 @@
+# Model files are generated after running: python model/train_model.py
+# Files created:
+# - fire_hazard_model.pkl
+# - scaler.pkl
+# - label_encoder.pkl
+# - confusion_matrix.png
+# - feature_importance.png

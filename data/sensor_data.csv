@@ -1,0 +1,4 @@
+temperature,humidity,gas_level,label
+28.5,65.0,120,SAFE
+52.0,30.0,310,WARNING
+82.0,14.0,680,FIRE
