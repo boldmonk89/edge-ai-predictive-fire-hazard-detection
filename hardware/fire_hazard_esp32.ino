@@ -35,7 +35,7 @@
 // ============================================================
 //  PIN DEFINITIONS
 // ============================================================
-#define DHT_PIN       4       // DHT22 data pin
+#define DHT_PIN       5       // DHT22 data pin
 #define DHT_TYPE      DHT22   // Sensor type
 #define MQ2_PIN       34      // MQ-2 analog output (ADC)
 #define BUZZER_PIN    26      // Buzzer
@@ -45,9 +45,9 @@
 // ============================================================
 //  WIFI & BACKEND CONFIG
 // ============================================================
-const char* WIFI_SSID     = "YOUR_WIFI_SSID";       // <-- Change this
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";    // <-- Change this
-const char* BACKEND_URL   = "http://192.168.1.100:5000/api/predict"; // <-- Change to your Flask server IP
+const char* WIFI_SSID     = "R2NET 2.4G";
+const char* WIFI_PASSWORD = "soldier2006";
+const char* BACKEND_URL   = "http://192.168.1.34:5000/api/predict";
 
 // ============================================================
 //  THRESHOLDS (used as fallback if no server response)
@@ -62,8 +62,8 @@ const char* BACKEND_URL   = "http://192.168.1.100:5000/api/predict"; // <-- Chan
 // ============================================================
 //  TIMING
 // ============================================================
-#define READ_INTERVAL    2000   // Read sensors every 2 seconds
-#define SEND_INTERVAL    5000   // Send to backend every 5 seconds
+#define READ_INTERVAL    500    // Read sensors every 0.5 seconds for fast response
+#define SEND_INTERVAL    2000   // Send to backend every 2 seconds
 
 // ============================================================
 //  GLOBAL OBJECTS
@@ -73,11 +73,18 @@ DHT dht(DHT_PIN, DHT_TYPE);
 float temperature   = 0.0;
 float humidity      = 0.0;
 int   gasLevel      = 0;
+int   gasRaw        = 0; 
+int   gasBaseline   = 0; 
+int   gasHistory[7] = {0,0,0,0,0,0,0}; // Balanced smoothing
+int   gasHistoryIdx = 0;
+bool  isWarmingUp    = true; // Warm-up flag
+unsigned long warmupStart = 0;
 String riskLevel    = "SAFE";
 float riskScore     = 0.0;
 
 unsigned long lastReadTime = 0;
 unsigned long lastSendTime = 0;
+int consecutiveAlerts = 0; // Guard against blips
 
 // ============================================================
 //  EDGE ML MODEL
@@ -94,36 +101,36 @@ Prediction runEdgeMLModel(float temp, float hum, int gas) {
   Prediction result;
   float score = 0.0;
 
-  // --- Temperature contribution ---
-  if (temp > 70.0)      score += 0.45;
-  else if (temp > 50.0) score += 0.25;
-  else if (temp > 35.0) score += 0.10;
+  // --- Temperature contribution (More sensitive for demos) ---
+  if (temp > 60.0)      score += 0.50; 
+  else if (temp > 40.0) score += 0.30;
+  else if (temp > 32.0) score += 0.15;
 
-  // --- Humidity contribution (inverse: lower = riskier) ---
-  if (hum < 20.0)       score += 0.20;
-  else if (hum < 35.0)  score += 0.10;
-  else if (hum > 70.0)  score -= 0.05;
+  // --- Humidity contribution (Low humidity increases fire risk) ---
+  if (hum < 25.0)       score += 0.25;
+  else if (hum < 40.0)  score += 0.10;
 
-  // --- Gas concentration contribution ---
-  if (gas > 500)        score += 0.40;
-  else if (gas > 250)   score += 0.20;
-  else if (gas > 100)   score += 0.05;
+  // --- Gas concentration contribution (Detecting RELATIVE change) ---
+  int gasDelta = gas - gasBaseline;
+  
+  // Balanced thresholds (Not too twitchy, not too slow)
+  if (gasDelta > 200)      score += 0.65; // Critical FIRE
+  else if (gasDelta > 110) score += 0.45; // Serious Warning
+  else if (gasDelta > 65)  score += 0.25; // Minor smoke (Threshold raised from 40 for stability)
 
   // Clamp score
-  if (score < 0.0) score = 0.0;
-  if (score > 1.0) score = 1.0;
-
+  score = constrain(score, 0.0, 1.0);
   result.score = score;
 
-  if (score < 0.35) {
+  if (score < 0.30) {
     result.label      = "SAFE";
-    result.confidence = 0.92;
-  } else if (score < 0.65) {
+    result.confidence = 0.94;
+  } else if (score < 0.60) {
     result.label      = "WARNING";
-    result.confidence = 0.87;
+    result.confidence = 0.88;
   } else {
     result.label      = "FIRE";
-    result.confidence = 0.95;
+    result.confidence = 0.97;
   }
 
   return result;
@@ -163,17 +170,26 @@ bool readSensors() {
   float h = dht.readHumidity();
 
   // Validate DHT22 reading
-  if (isnan(t) || isnan(h)) {
-    Serial.println("[DHT22] ERROR: Failed to read sensor!");
-    return false;
+  if (isnan(t) || isnan(h) || (t == 0.0 && h == 0.0)) {
+    Serial.println("[DHT22] WARNING: Reading Error. Check wires. Using fallback...");
+    // Don't return false; just use safe fallbacks so MQ-2 still works
+    temperature = 25.0; 
+    humidity    = 45.0;
+  } else {
+    temperature = t;
+    humidity    = h;
   }
 
-  temperature = t;
-  humidity    = h;
+  // MQ-2: Read raw ADC and apply Moving Average Filter
+  int currentRaw = analogRead(MQ2_PIN);
+  gasHistory[gasHistoryIdx] = currentRaw;
+  gasHistoryIdx = (gasHistoryIdx + 1) % 7;
 
-  // MQ-2: Read raw ADC (0-4095 on ESP32), convert to ppm
-  int rawADC = analogRead(MQ2_PIN);
-  gasLevel   = map(rawADC, 0, 4095, 0, 1000); // Simplified mapping
+  long sum = 0;
+  for(int i=0; i<7; i++) sum += gasHistory[i];
+  gasRaw = sum / 7; // Averaged value
+
+  gasLevel = map(gasRaw, 0, 4095, 0, 1000); 
 
   return true;
 }
@@ -209,13 +225,18 @@ void sendToBackend(Prediction pred) {
 
   int httpCode = http.POST(payload);
 
-  if (httpCode == HTTP_CODE_OK) {
-    String response = http.getString();
-    Serial.print("[API] Response: ");
-    Serial.println(response);
+  if (httpCode > 0) {
+    if (httpCode == HTTP_CODE_OK) {
+      String response = http.getString();
+      Serial.print("[API] Status: 200 OK | Response: ");
+      Serial.println(response);
+    } else {
+      Serial.print("[API] Status: ");
+      Serial.println(httpCode);
+    }
   } else {
-    Serial.print("[API] HTTP Error: ");
-    Serial.println(httpCode);
+    Serial.print("[API] Error: ");
+    Serial.println(http.errorToString(httpCode).c_str());
   }
 
   http.end();
@@ -225,29 +246,30 @@ void sendToBackend(Prediction pred) {
 //  ACTUATORS: LED + BUZZER
 // ============================================================
 void triggerActuators(String label) {
+  static unsigned long lastBeep = 0;
+  unsigned long now = millis();
+
   if (label == "SAFE") {
     digitalWrite(LED_GREEN, HIGH);
     digitalWrite(LED_RED,   LOW);
-    noTone(BUZZER_PIN);
+    digitalWrite(BUZZER_PIN, HIGH); // OFF
 
   } else if (label == "WARNING") {
     digitalWrite(LED_GREEN, LOW);
     digitalWrite(LED_RED,   HIGH);
-    // Slow beep
-    tone(BUZZER_PIN, 1000, 300);
-    delay(600);
-    noTone(BUZZER_PIN);
+    // Non-blocking slow beep
+    if (now - lastBeep > 800) {
+       digitalWrite(BUZZER_PIN, !digitalRead(BUZZER_PIN));
+       lastBeep = now;
+    }
 
   } else if (label == "FIRE") {
     digitalWrite(LED_GREEN, LOW);
-    // Rapid flash + loud alarm
-    for (int i = 0; i < 5; i++) {
-      digitalWrite(LED_RED, HIGH);
-      tone(BUZZER_PIN, 2400, 100);
-      delay(150);
-      digitalWrite(LED_RED, LOW);
-      noTone(BUZZER_PIN);
-      delay(100);
+    // Non-blocking rapid flash/beep
+    digitalWrite(LED_RED, (now / 150) % 2); 
+    if (now - lastBeep > 150) {
+       digitalWrite(BUZZER_PIN, !digitalRead(BUZZER_PIN));
+       lastBeep = now;
     }
   }
 }
@@ -259,7 +281,7 @@ void printReading(Prediction pred) {
   Serial.println("==============================================");
   Serial.printf("[SENSOR] Temp     : %.1f °C\n",   temperature);
   Serial.printf("[SENSOR] Humidity : %.1f %%\n",   humidity);
-  Serial.printf("[SENSOR] Gas      : %d ppm\n",    gasLevel);
+  Serial.printf("[SENSOR] Gas      : %d ppm (Raw ADC: %d)\n", gasLevel, gasRaw);
   Serial.println("----------------------------------------------");
   Serial.printf("[ML]     Prediction : %s\n",      pred.label.c_str());
   Serial.printf("[ML]     Risk Score : %.2f\n",    pred.score);
@@ -271,8 +293,31 @@ void printReading(Prediction pred) {
 //  SETUP
 // ============================================================
 void setup() {
+  // --- IMMEDIATE ACTUATOR RESET ---
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, HIGH); // SILENCE IMMEDIATELY
+  pinMode(LED_RED,    OUTPUT);
+  pinMode(LED_GREEN,  OUTPUT);
+  digitalWrite(LED_RED,   LOW);
+  digitalWrite(LED_GREEN, LOW);
+
   Serial.begin(115200);
-  delay(1000);
+  delay(500);
+
+  Serial.println("\n[SYSTEM] PINS CONFIGURED... OK");
+
+  // Init DHT sensor
+  dht.begin();
+  Serial.println("[DHT22] Sensor initialized.");
+
+  // ============================================================
+  //  HARDWARE SELF-TEST (Blink at boot)
+  // ============================================================
+  Serial.println("[SYSTEM] Starting Hardware Self-Test...");
+  digitalWrite(LED_GREEN, HIGH); delay(300);
+  digitalWrite(LED_GREEN, LOW);  digitalWrite(LED_RED, HIGH); delay(300);
+  digitalWrite(LED_RED,   LOW);
+  Serial.println("[SYSTEM] Self-Test Complete.");
 
   Serial.println("\n====================================");
   Serial.println("  Edge-AI Fire Hazard Detection");
@@ -285,26 +330,14 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(MQ2_PIN,    INPUT);
 
-  // Initial state
-  digitalWrite(LED_RED,   LOW);
-  digitalWrite(LED_GREEN, LOW);
-
-  // Init DHT sensor
-  dht.begin();
-  Serial.println("[DHT22] Sensor initialized.");
-
-  // MQ-2 warmup (needs ~30s for accurate readings)
-  Serial.println("[MQ-2]  Warming up sensor (20 seconds)...");
-  for (int i = 20; i > 0; i--) {
-    Serial.printf("[MQ-2]  %d seconds remaining...\n", i);
-    delay(1000);
-  }
-  Serial.println("[MQ-2]  Warm-up complete.");
+  // Initial state (Inverted)
+  Serial.println("[SYSTEM] Self-Test Complete.");
 
   // Connect WiFi
   connectWiFi();
 
-  Serial.println("\n[SYSTEM] Starting monitoring loop...\n");
+  Serial.println("\n[SYSTEM] Entering Warm-up & Calibration (60 seconds)...");
+  warmupStart = millis();
 }
 
 // ============================================================
@@ -312,6 +345,23 @@ void setup() {
 // ============================================================
 void loop() {
   unsigned long now = millis();
+
+  // --- Warm-up Phase Logic ---
+  if (isWarmingUp) {
+    if (now - warmupStart < 60000) {
+      digitalWrite(LED_GREEN, (now / 500) % 2); // Blink green
+      if (now % 2000 < 50) Serial.println("[SYSTEM] Warming up sensors... Please wait.");
+      return; 
+    } else {
+      isWarmingUp = false;
+      // Calibrate baseline AFTER warm-up for best stability
+      long sum = 0;
+      for (int i=0; i<10; i++) sum += analogRead(MQ2_PIN);
+      gasBaseline = sum / 10;
+      Serial.printf("[SYSTEM] Warm-up complete. Baseline set to: %d\n", gasBaseline);
+      digitalWrite(LED_GREEN, HIGH);
+    }
+  }
 
   // --- Read sensors every READ_INTERVAL ---
   if (now - lastReadTime >= READ_INTERVAL) {
@@ -322,6 +372,20 @@ void loop() {
 
     // Run edge ML inference
     Prediction pred = runEdgeMLModel(temperature, humidity, gasLevel);
+    
+    // --- Consistency Check: Only escalate if readings are sustained ---
+    if (pred.label != "SAFE") {
+      consecutiveAlerts++;
+    } else {
+      consecutiveAlerts = 0;
+    }
+
+    // Only allow Warning/Fire if seen for 3 consecutive cycles (~1.5s total)
+    if (consecutiveAlerts < 3 && pred.label != "SAFE") {
+      pred.label = "SAFE";
+      pred.score = 0.10; 
+    }
+
     riskLevel = pred.label;
     riskScore = pred.score;
 

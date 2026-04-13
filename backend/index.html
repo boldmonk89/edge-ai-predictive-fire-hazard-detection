@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge-AI Fire Hazard Detection | Dashboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700;900&display=swap');
+
+        :root {
+            --bg: #050a0f;
+            --panel: rgba(10, 21, 32, 0.7);
+            --border: rgba(15, 42, 64, 0.5);
+            --accent: #00d4ff;
+            --warn: #ffaa00;
+            --danger: #ff3a3a;
+            --safe: #00ff88;
+            --text: #c8e4f0;
+            --dim: #4a7090;
+            --glass: blur(12px);
+            --glow-safe: 0 0 20px #00ff8866;
+            --glow-warn: 0 0 20px #ffaa0066;
+            --glow-danger: 0 0 20px #ff3a3a99;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            font-family: 'Exo 2', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Premium Animated Background */
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background: 
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.01) 2px, rgba(0,212,255,0.01) 4px),
+                radial-gradient(circle at 50% 50%, rgba(0,18,30,1) 0%, rgba(5,10,15,1) 100%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* HEADER */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 30px;
+            border: 1px solid var(--border);
+            margin-bottom: 30px;
+            background: var(--panel);
+            border-radius: 16px;
+            backdrop-filter: var(--glass);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        .logo-area { display: flex; align-items: center; gap: 20px; }
+
+        .fire-icon {
+            width: 56px; height: 56px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px;
+            background: linear-gradient(135deg, #ff6b00, #ff3a3a);
+            border-radius: 14px;
+            box-shadow: 0 0 30px #ff3a3a44;
+            animation: pulseIcon 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseIcon {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 25px #ff3a3a55; }
+            50% { transform: scale(1.05); box-shadow: 0 0 45px #ff3a3aaa; }
+        }
+
+        .title-block h1 {
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: #fff;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #fff, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .title-block p {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dim);
+            letter-spacing: 3px;
+            margin-top: 4px;
+        }
+
+        .header-right { display: flex; align-items: center; gap: 24px; }
+
+        .system-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--dim);
+            text-align: right;
+            border-right: 1px solid var(--border);
+            padding-right: 20px;
+        }
+
+        .system-time span { display: block; color: var(--accent); font-size: 1.2rem; font-weight: bold; }
+
+        .status-dot-container { display: flex; align-items: center; gap: 10px; }
+        .status-text { font-family: 'Share Tech Mono', monospace; font-size: 0.65rem; color: var(--dim); letter-spacing: 1px; }
+
+        .status-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--safe);
+            box-shadow: var(--glow-safe);
+            animation: blink 1.5s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        /* RISK BANNER */
+        .risk-banner {
+            border-radius: 20px;
+            padding: 32px 40px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid transparent;
+            backdrop-filter: var(--glass);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .risk-banner.safe { background: rgba(0,255,136,0.05); border-color: rgba(0,255,136,0.2); color: var(--safe); }
+        .risk-banner.warning { background: rgba(255,170,0,0.05); border-color: rgba(255,170,0,0.2); color: var(--warn); }
+        .risk-banner.fire { background: rgba(255,58,58,0.1); border-color: rgba(255,58,58,0.3); color: var(--danger); animation: alertPulse 1s ease-in-out infinite; }
+
+        @keyframes alertPulse {
+            0%,100% { box-shadow: 0 0 0px rgba(255,58,58,0); }
+            50% { box-shadow: 0 0 50px rgba(255,58,58,0.2); }
+        }
+
+        .risk-label { font-size: 0.75rem; font-family: 'Share Tech Mono', monospace; letter-spacing: 4px; opacity: 0.7; margin-bottom: 8px; }
+        .risk-value { font-size: 3.5rem; font-weight: 900; line-height: 1; letter-spacing: 3px; }
+        .risk-sublabel { font-size: 0.9rem; opacity: 0.7; margin-top: 8px; font-family: 'Share Tech Mono', monospace; }
+
+        .risk-meter { width: 200px; text-align: center; }
+        .meter-ring { width: 140px; height: 140px; margin: 0 auto; position: relative; }
+        .meter-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .meter-ring circle { fill: none; stroke-width: 10; }
+        .meter-bg { stroke: rgba(255,255,255,0.05); }
+        .meter-fill { stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 0.8s ease; stroke-linecap: round; }
+        .meter-val {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        /* GRID */
+        .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 30px; }
+        .grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 30px; }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 28px;
+            backdrop-filter: var(--glass);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            transition: transform 0.3s, border-color 0.3s;
+        }
+        .panel:hover { border-color: var(--accent); transform: translateY(-4px); }
+
+        .panel-title {
+            font-size: 0.75rem;
+            font-family: 'Share Tech Mono', monospace;
+            letter-spacing: 3px;
+            color: var(--dim);
+            text-transform: uppercase;
+            margin-bottom: 24px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .panel-title::before { content: ''; width: 4px; height: 12px; background: var(--accent); border-radius: 2px; }
+
+        /* SENSOR CARDS */
+        .sensor-card { text-align: center; }
+        .sensor-icon { font-size: 2.2rem; margin-bottom: 16px; filter: drop-shadow(0 0 10px rgba(0,212,255,0.3)); }
+        .sensor-name { font-size: 0.7rem; font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; color: var(--dim); margin-bottom: 10px; }
+        .sensor-value { font-size: 3rem; font-weight: 900; line-height: 1; transition: color 0.5s; }
+        .sensor-unit { font-size: 1rem; opacity: 0.5; margin-left: 6px; font-weight: 400; }
+
+        .sensor-bar { margin-top: 20px; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+        .sensor-bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease, background 0.5s; }
+
+        .sensor-range {
+            display: flex; justify-content: space-between; margin-top: 8px;
+            font-family: 'Share Tech Mono', monospace; font-size: 0.65rem; color: var(--dim);
+        }
+
+        /* CHART */
+        .chart-container { position: relative; height: 250px; }
+
+        /* LOG TABLE */
+        .log-table { width: 100%; border-collapse: collapse; }
+        .log-table th {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem; letter-spacing: 2px; color: var(--dim);
+            padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border);
+        }
+        .log-table td { padding: 14px 16px; font-size: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.02); }
+        .log-table tr:hover td { background: rgba(255,255,255,0.01); }
+
+        .badge {
+            display: inline-block; padding: 4px 12px; border-radius: 6px;
+            font-size: 0.7rem; font-family: 'Share Tech Mono', monospace;
+            letter-spacing: 1.5px; font-weight: bold; text-transform: uppercase;
+        }
+        .badge.safe { background: rgba(0,255,136,0.1); color: var(--safe); border: 1px solid rgba(0,255,136,0.2); }
+        .badge.warning { background: rgba(255,170,0,0.1); color: var(--warn); border: 1px solid rgba(255,170,0,0.2); }
+        .badge.fire { background: rgba(255,58,58,0.15); color: var(--danger); border: 1px solid rgba(255,58,58,0.3); }
+
+        /* ALERT BOX */
+        .alert-box {
+            position: fixed; top: 30px; right: 30px;
+            background: rgba(20,0,0,0.9); border: 1px solid var(--danger);
+            border-radius: 16px; padding: 20px 30px; color: #fff;
+            font-family: 'Exo 2', sans-serif; z-index: 1000;
+            transform: translateX(200%); transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 50px rgba(255,58,58,0.4);
+        }
+        .alert-box.show { transform: translateX(0); }
+        .alert-box strong { color: var(--danger); display: block; font-size: 1.2rem; margin-bottom: 6px; }
+
+        footer {
+            text-align: center; padding: 40px; color: var(--dim);
+            font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; letter-spacing: 2px;
+        }
+        footer span { color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- HEADER -->
+    <header>
+        <div class="logo-area">
+            <div class="fire-icon">🔥</div>
+            <div class="title-block">
+                <h1>Edge-AI Fire Hazard Detection</h1>
+                <p>IOT · MACHINE LEARNING · REAL-TIME ANALYTICS</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="system-time">
+                SYSTEM CLOCK
+                <span id="clock">00:00:00</span>
+            </div>
+            <div class="status-dot-container">
+                <div class="status-dot" id="statusDot"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- RISK BANNER -->
+    <div class="risk-banner safe" id="riskBanner">
+        <div>
+            <div class="risk-label">ML RISK ASSESSMENT</div>
+            <div class="risk-value" id="riskLabel">SAFE</div>
+            <div class="risk-sublabel" id="riskSubLabel">Environmental stability confirmed.</div>
+        </div>
+        <div class="risk-meter">
+            <div class="meter-ring">
+                <svg viewBox="0 0 100 100">
+                    <circle class="meter-bg" cx="50" cy="50" r="45"/>
+                    <circle class="meter-fill" id="meterFill" cx="50" cy="50" r="45"/>
+                </svg>
+                <div class="meter-val" id="meterVal">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SENSOR GRIDS -->
+    <div class="grid3">
+        <div class="panel sensor-card">
+            <div class="panel-title">SENSORS · TEMPERATURE</div>
+            <div class="sensor-icon">🌡️</div>
+            <div class="sensor-name">AMBIENT TEMP</div>
+            <div class="sensor-value" id="tempVal">0<span class="sensor-unit">°C</span></div>
+            <div class="sensor-bar"><div class="sensor-bar-fill" id="tempBar"></div></div>
+            <div class="sensor-range"><span>0°C</span><span>100°C</span></div>
+        </div>
+
+        <div class="panel sensor-card">
+            <div class="panel-title">SENSORS · HUMIDITY</div>
+            <div class="sensor-icon">💧</div>
+            <div class="sensor-name">MOISTURE LEVEL</div>
+            <div class="sensor-value" id="humVal">0<span class="sensor-unit">%</span></div>
+            <div class="sensor-bar"><div class="sensor-bar-fill" id="humBar"></div></div>
+            <div class="sensor-range"><span>0%</span><span>100%</span></div>
+        </div>
+
+        <div class="panel sensor-card">
+            <div class="panel-title">SENSORS · SMOKE</div>
+            <div class="sensor-icon">💨</div>
+            <div class="sensor-name">MQ-2 CONCENTRATION</div>
+            <div class="sensor-value" id="gasVal">0<span class="sensor-unit">ppm</span></div>
+            <div class="sensor-bar"><div class="sensor-bar-fill" id="gasBar"></div></div>
+            <div class="sensor-range"><span>0ppm</span><span>1000ppm</span></div>
+        </div>
+    </div>
+
+    <div class="grid2">
+        <div class="panel">
+            <div class="panel-title">DATA VISUALIZATION · LIVE TREND</div>
+            <div class="chart-container">
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-title">SYSTEM STATUS</div>
+            <p id="simStatus" class="status-text" style="line-height: 1.6; margin-top: 10px;">
+                Handshaking with Flask server...
+            </p>
+            <div style="margin-top: 24px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--border);">
+                <div style="font-family:'Share Tech Mono'; font-size: 0.7rem; color: var(--accent); margin-bottom: 5px;">ARCHITECTURE</div>
+                <div style="font-size: 0.8rem; color: var(--text);">Edge: ESP32</div>
+                <div style="font-size: 0.8rem; color: var(--text);">Model: Random Forest</div>
+                <div style="font-size: 0.8rem; color: var(--text);">API: Flask @ 192.168.137.1</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOG SECTION -->
+    <div class="panel">
+        <div class="panel-title" style="justify-content: space-between;">
+            HISTORICAL LOGS
+            <span id="logCount" style="color: var(--accent); opacity: 0.8;">0 ENTRIES</span>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>TIME</th>
+                        <th>TEMP</th>
+                        <th>HUMIDITY</th>
+                        <th>GAS</th>
+                        <th>ASSESSMENT</th>
+                        <th>CONFIDENCE</th>
+                    </tr>
+                </thead>
+                <tbody id="logBody">
+                    <!-- Dynamic Rows -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer>
+        FIRE HAZARD DETECTION SYSTEM &copy; 2026 · <span>ACADEMIC PROJECT</span> · PREDICTIVE EDGE-AI MONITORING
+    </footer>
+</div>
+
+<!-- ALERT BOX -->
+<div class="alert-box" id="alertBox">
+    <strong>⚠ WARNING: FIRE RISK!</strong>
+    Anomalous sensor data detected.
+</div>
+
+<!-- External Dependencies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<script>
+    /**
+     * Edge-AI Fire Hazard Detection
+     * Dashboard Logic — Fetching, Rendering, and Real-time Updates
+     */
+
+    // --- chart Setup ---
+    const ctx = document.getElementById('sensorChart').getContext('2d');
+    const chartData = {
+      labels: Array.from({length: 20}, (_, i) => `T-${19 - i}`),
+      datasets: [
+        { label: 'Temp', data: [], borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.08)', tension: 0.4, pointRadius: 2, borderWidth: 2, fill: true },
+        { label: 'Humidity', data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.06)', tension: 0.4, pointRadius: 2, borderWidth: 2, fill: true },
+        { label: 'Gas (adj)', data: [], borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.06)', tension: 0.4, pointRadius: 2, borderWidth: 2, fill: true },
+      ]
+    };
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#4a7090', font: { family: 'Share Tech Mono', size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#4a7090', font: { family: 'Share Tech Mono', size: 10 } }, min: 0 }
+        }
+    };
+
+    const sensorChart = new Chart(ctx, { type: 'line', data: chartData, options: chartOptions });
+
+    // --- State ---
+    let lastLabel = 'SAFE';
+    let alertTimeout;
+
+    // --- Clock ---
+    function updateClock() {
+        const el = document.getElementById('clock');
+        if (el) el.textContent = new Date().toLocaleTimeString();
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    /**
+     * Update individual sensor card display
+     */
+    function updateSensorUI(valId, barId, val, max, dangerThresh, warnThresh) {
+        const el = document.getElementById(valId);
+        const bar = document.getElementById(barId);
+        if (!el || !bar) return;
+
+        const pct = Math.min(100, (val / max) * 100);
+        let color;
+        
+        if (val >= dangerThresh) color = 'var(--danger)'; 
+        else if (val >= warnThresh) color = 'var(--warn)';
+        else color = 'var(--safe)';
+
+        el.style.color = color;
+        bar.style.width = pct + '%';
+        bar.style.background = color;
+    }
+
+    /**
+     * Handle Risk Banner and Meter
+     */
+    function updateRiskBanner(prediction) {
+        const banner = document.getElementById('riskBanner');
+        const labelEl = document.getElementById('riskLabel');
+        const subEl = document.getElementById('riskSubLabel');
+        const meterFill = document.getElementById('meterFill');
+        const meterVal = document.getElementById('meterVal');
+
+        if (!banner) return;
+
+        const label = prediction.label || 'SAFE';
+        banner.className = 'risk-banner ' + label.toLowerCase();
+        labelEl.textContent = label;
+
+        const msgs = {
+            SAFE: 'Environmental conditions are STABLE',
+            WARNING: 'ELEVATED RISK — Monitor sensors closely',
+            FIRE: '⚠ CRITICAL — Fire Hazard Detected!'
+        };
+        subEl.textContent = msgs[label] || msgs.SAFE;
+
+        const score = prediction.risk_score || 0;
+        const pct = Math.round(score * 100);
+
+        // SVG Circular Meter Logic
+        const circum = 283; // 2 * PI * R (R=45)
+        const offset = circum - (pct / 100) * circum;
+        meterFill.style.strokeDashoffset = offset;
+
+        const colors = { SAFE: 'var(--safe)', WARNING: 'var(--warn)', FIRE: 'var(--danger)' };
+        const color = colors[label] || colors.SAFE;
+        meterFill.style.stroke = color;
+        meterVal.style.color = color;
+        meterVal.textContent = pct + '%';
+
+        // Global Alert Trigger
+        if (label === 'FIRE' && lastLabel !== 'FIRE') {
+            showGlobalAlert();
+        }
+        lastLabel = label;
+    }
+
+    function showGlobalAlert() {
+        const box = document.getElementById('alertBox');
+        if (!box) return;
+        box.classList.add('show');
+        clearTimeout(alertTimeout);
+        alertTimeout = setTimeout(() => box.classList.remove('show'), 5000);
+    }
+
+    function setConnectionUI(online) {
+        const dot = document.getElementById('statusDot');
+        const statusText = document.getElementById('simStatus');
+        if (!dot) return;
+
+        if (online) {
+            dot.style.background = 'var(--safe)';
+            dot.style.boxShadow = 'var(--glow-safe)';
+            statusText.textContent = 'SYSTEM ONLINE — Receiving real-time telemetry from ESP32';
+            statusText.style.color = 'var(--safe)';
+        } else {
+            dot.style.background = 'var(--warn)';
+            dot.style.boxShadow = 'var(--glow-warn)';
+            statusText.textContent = 'DISCONNECTED — Waiting for Flask API or ESP32 node...';
+            statusText.style.color = 'var(--warn)';
+        }
+    }
+
+    /**
+     * Core Data Fetching
+     */
+    async function fetchData() {
+        try {
+            const response = await fetch('/api/history?limit=20');
+            if (!response.ok) throw new Error('API Unreachable');
+            const json = await response.json();
+            const data = json.data;
+
+            if (!data || data.length === 0) {
+                setConnectionUI(false);
+                return;
+            }
+
+            setConnectionUI(true);
+            const latest = data[0];
+
+            // Update Cards
+            updateSensorUI('tempVal', 'tempBar', latest.inputs.temperature, 100, 50, 35);
+            updateSensorUI('humVal',  'humBar',  latest.inputs.humidity,    100, 20, 35);
+            
+            // Special logic for humidity color (Blue/Green for high, Orange/Red for low)
+            const hum = latest.inputs.humidity;
+            const humBar = document.getElementById('humBar');
+            humBar.style.background = hum < 20 ? 'var(--danger)' : hum < 35 ? 'var(--warn)' : 'var(--accent)';
+
+            updateSensorUI('gasVal',  'gasBar',  latest.inputs.gas_level,   1000, 500, 250);
+
+            // Update Text
+            document.getElementById('tempVal').innerHTML = latest.inputs.temperature.toFixed(1) + '<span class="sensor-unit">°C</span>';
+            document.getElementById('humVal').innerHTML  = latest.inputs.humidity.toFixed(1) + '<span class="sensor-unit">%</span>';
+            document.getElementById('gasVal').innerHTML  = latest.inputs.gas_level.toFixed(0) + '<span class="sensor-unit">ppm</span>';
+
+            // Update Banner
+            updateRiskBanner(latest.prediction);
+
+            // Update Chart
+            const reversed = [...data].reverse();
+            sensorChart.data.labels = reversed.map((_, i) => `T-${reversed.length - 1 - i}`);
+            sensorChart.data.datasets[0].data = reversed.map(d => d.inputs.temperature);
+            sensorChart.data.datasets[1].data = reversed.map(d => d.inputs.humidity);
+            sensorChart.data.datasets[2].data = reversed.map(d => Math.min(100, d.inputs.gas_level / 5)); // Scaling gas for visibility
+            sensorChart.update('active');
+
+            // Update Log Table
+            const logBody = document.getElementById('logBody');
+            logBody.innerHTML = data.slice(0, 10).map(entry => {
+                let timeStr = "---";
+                try {
+                    if (entry.timestamp) {
+                        const d = new Date(entry.timestamp);
+                        timeStr = isNaN(d) ? entry.timestamp.split('T')[1].split('.')[0] : d.toLocaleTimeString();
+                    }
+                } catch(e) { timeStr = "Error"; }
+
+                const label = entry.prediction.label;
+                return `
+                    <tr>
+                        <td style="font-family:'Share Tech Mono'; font-size: 0.75rem;">${timeStr}</td>
+                        <td>${entry.inputs.temperature.toFixed(1)}°C</td>
+                        <td>${entry.inputs.humidity.toFixed(1)}%</td>
+                        <td>${entry.inputs.gas_level.toFixed(0)}ppm</td>
+                        <td><span class="badge ${label.toLowerCase()}">${label}</span></td>
+                        <td style="color:var(--accent); font-family: 'Share Tech Mono'">${(entry.prediction.confidence).toFixed(1)}%</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('logCount').textContent = `${data.length} ENTRIES LOGGED`;
+
+        } catch (err) {
+            console.error(err);
+            setConnectionUI(false);
+        }
+    }
+
+    // Initial Fetch and Polling
+    fetchData();
+    setInterval(fetchData, 2000);
+</script>
+
+</body>
+</html>

@@ -89,7 +89,7 @@ def generate_dataset(n=N_SAMPLES):
 
     df = pd.DataFrame(records).sample(frac=1, random_state=RANDOM_SEED).reset_index(drop=True)
     df.to_csv(DATASET_PATH, index=False)
-    print(f"[DATA] Dataset saved → {DATASET_PATH}")
+    print(f"[DATA] Dataset saved -> {DATASET_PATH}")
     print(f"[DATA] Shape: {df.shape}")
     print(f"[DATA] Class distribution:\n{df['label'].value_counts()}\n")
     return df
@@ -193,7 +193,7 @@ def plot_confusion_matrix(cm, classes):
     plt.tight_layout()
     plt.savefig("model/confusion_matrix.png", dpi=150)
     plt.show()
-    print("[PLOT] Saved → model/confusion_matrix.png")
+    print("[PLOT] Saved -> model/confusion_matrix.png")
 
 
 def plot_feature_importance(model, feature_cols):
@@ -212,7 +212,7 @@ def plot_feature_importance(model, feature_cols):
     plt.tight_layout()
     plt.savefig("model/feature_importance.png", dpi=150)
     plt.show()
-    print("[PLOT] Saved → model/feature_importance.png")
+    print("[PLOT] Saved -> model/feature_importance.png")
 
 
 def plot_class_distribution(df):
@@ -227,7 +227,7 @@ def plot_class_distribution(df):
     plt.tight_layout()
     plt.savefig("model/class_distribution.png", dpi=150)
     plt.show()
-    print("[PLOT] Saved → model/class_distribution.png")
+    print("[PLOT] Saved -> model/class_distribution.png")
 
 
 # ============================================================
@@ -237,9 +237,9 @@ def save_model(model, scaler, le):
     joblib.dump(model,  MODEL_PATH)
     joblib.dump(scaler, SCALER_PATH)
     joblib.dump(le,     ENCODER_PATH)
-    print(f"\n[SAVE] Model   → {MODEL_PATH}")
-    print(f"[SAVE] Scaler  → {SCALER_PATH}")
-    print(f"[SAVE] Encoder → {ENCODER_PATH}")
+    print(f"\n[SAVE] Model   -> {MODEL_PATH}")
+    print(f"[SAVE] Scaler  -> {SCALER_PATH}")
+    print(f"[SAVE] Encoder -> {ENCODER_PATH}")
 
 
 # ============================================================
@@ -316,5 +316,5 @@ if __name__ == "__main__":
     # 9. Quick test
     test_single_prediction(model, scaler, le)
 
-    print("\n[DONE] Training pipeline complete! ✅")
+    print("\n[DONE] Training pipeline complete! [OK]")
     print("[NEXT] Run backend/app.py to start the Flask API.\n")

@@ -32,8 +32,9 @@ import json
 # ============================================================
 #  APP INIT
 # ============================================================
-app = Flask(__name__)
+app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)  # Allow ESP32 and dashboard to call this API
+from flask import send_from_directory
 
 # ============================================================
 #  LOAD ML MODEL
@@ -48,7 +49,7 @@ try:
     model   = joblib.load(MODEL_PATH)
     scaler  = joblib.load(SCALER_PATH)
     le      = joblib.load(ENCODER_PATH)
-    print("[API] Model loaded successfully ✅")
+    print("[API] Model loaded successfully [OK]")
     MODEL_LOADED = True
 except Exception as e:
     print(f"[API] WARNING: Could not load model — {e}")
@@ -58,8 +59,17 @@ except Exception as e:
 # ============================================================
 #  IN-MEMORY LOG (stores last 200 predictions)
 # ============================================================
-prediction_history = []
 MAX_HISTORY = 200
+prediction_history = []
+
+# --- Add one initial log entry so dashboard isn't empty on load ---
+prediction_history.append({
+    "timestamp": datetime.now().isoformat(),
+    "device_id": "SYSTEM",
+    "inputs": {"temperature": 0.0, "humidity": 0.0, "gas_level": 0.0},
+    "prediction": {"label": "SAFE", "risk_score": 0.0, "confidence": 100.0},
+    "alert": False
+})
 
 # ============================================================
 #  HELPER: FEATURE ENGINEERING
@@ -126,8 +136,12 @@ def predict():
         if not (0 <= gas_level <= 1500):
             return jsonify({"error": "Gas level out of range (0-1500 ppm)"}), 400
 
-        # --- Predict ---
-        if MODEL_LOADED:
+        # --- Predict (Prioritize ESP32 evaluation if available) ---
+        if "risk_label" in data:
+            pred_label = data["risk_label"]
+            risk_score = data.get("risk_score", 0.0)
+            confidence = data.get("confidence", 0.90)
+        elif MODEL_LOADED:
             features        = build_features(temperature, humidity, gas_level)
             features_scaled = scaler.transform(features)
             pred_enc        = model.predict(features_scaled)[0]
@@ -165,8 +179,8 @@ def predict():
 
         # --- Log to console ---
         print(f"[{timestamp}] Device={device_id} | "
-              f"T={temperature}°C H={humidity}% G={gas_level}ppm "
-              f"→ {pred_label} ({confidence*100:.1f}%)")
+              f"T={temperature}C H={humidity}% G={gas_level}ppm "
+              f"-> {pred_label} ({confidence*100:.1f}%)")
 
         return jsonify(result), 200
 
@@ -208,6 +222,18 @@ def history():
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/latest")
+def latest():
+    if not prediction_history:
+        return jsonify({"error": "No data yet"}), 404
+    return jsonify(prediction_history[-1])
+
+
+@app.route("/")
+def index():
+    return send_from_directory(app.static_folder, "index.html")
 
 
 # ============================================================
